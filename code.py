@@ -16,6 +16,7 @@ c.execute("""CREATE TABLE IF NOT EXISTS users(
     password VARCHAR(50),
     gender TEXT,
     age INTEGER,
+    city TEXT,
     profile_photo TEXT,
     profile_text TEXT
 )""")
@@ -48,6 +49,12 @@ CREATE TABLE IF NOT EXISTS messages (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )""")
 
+c.execute("""
+CREATE TABLE IF NOT EXISTS city (
+    id INTEGER PRIMARY KEY,
+    name TEXT
+)""")
+
 # Главное окно авторизации
 window = ttkbootstrap.Window(themename="vapor")
 window.title("Авторизация")
@@ -71,46 +78,70 @@ def reg_window():
     # Создаем новое окно для регистрации
     reg_win = Toplevel(window)
     reg_win.title("Регистрация")
-    reg_win.geometry("500x500+500+200")
+    reg_win.geometry("500x600+500+200")
 
-    ttkbootstrap.Label(reg_win, text="Введите логин:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=20)
+    ttkbootstrap.Label(reg_win, text="Введите логин:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=10)
     entry_reg_login = ttkbootstrap.Entry(reg_win, width=40, bootstyle=ttkbootstrap.PRIMARY)
     entry_reg_login.pack()
 
-    ttkbootstrap.Label(reg_win, text="Введите пароль:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=20)
+    ttkbootstrap.Label(reg_win, text="Введите пароль:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=10)
     entry_reg_password = ttkbootstrap.Entry(reg_win, width=40, show="*", bootstyle=ttkbootstrap.PRIMARY)
     entry_reg_password.pack()
 
-    # Добавляем выбор пола
-    ttkbootstrap.Label(reg_win, text="Выберите пол:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=20)
+    # Выбор пола
+    ttkbootstrap.Label(reg_win, text="Выберите пол:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=10)
+    gender_var = tk.StringVar(value="")  # Значение по умолчанию (пустое)
 
-    gender_var = tk.StringVar(value="Не указан")  # Устанавливаем значение по умолчанию
+    ttkbootstrap.Radiobutton(reg_win, text="Мужской", variable=gender_var, value="Мужской", bootstyle=ttkbootstrap.PRIMARY).pack()
+    ttkbootstrap.Radiobutton(reg_win, text="Женский", variable=gender_var, value="Женский", bootstyle=ttkbootstrap.PRIMARY).pack()
 
-    ttkbootstrap.Radiobutton(reg_win, text="Мужчина", variable=gender_var, value="Мужчина", bootstyle=ttkbootstrap.PRIMARY).pack()
-    ttkbootstrap.Radiobutton(reg_win, text="Женщина", variable=gender_var, value="Женщина", bootstyle=ttkbootstrap.PRIMARY).pack()
-    ttkbootstrap.Radiobutton(reg_win, text="Не указан", variable=gender_var, value="Не указан", bootstyle=ttkbootstrap.PRIMARY).pack()
+    # Выбор города
+    ttkbootstrap.Label(reg_win, text="Выберите город:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=10)
+    city_var = tk.StringVar(value="")  # Значение по умолчанию (пустое)
+    city_combobox = ttk.Combobox(reg_win, textvariable=city_var, state="readonly", width=38)
 
-    # Добавляем ввод возраста
-    ttkbootstrap.Label(reg_win, text="Введите возраст:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=20)
+    # Загрузка городов из базы данных
+    c.execute("SELECT name FROM city")
+    cities = [row[0] for row in c.fetchall()]
+    city_combobox['values'] = cities
+    city_combobox.pack(pady=10)
+
+    # Ввод возраста
+    ttkbootstrap.Label(reg_win, text="Введите возраст:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=10)
     entry_reg_age = ttkbootstrap.Entry(reg_win, width=40, bootstyle=ttkbootstrap.PRIMARY)
     entry_reg_age.pack()
 
-    ttkbootstrap.Button(reg_win, text="Завершить регистрацию", bootstyle=ttkbootstrap.PRIMARY, command=lambda: register(entry_reg_login.get(), entry_reg_password.get(), gender_var.get(), entry_reg_age.get(), reg_win)).pack(pady=20)
+    # Кнопка завершения регистрации
+    ttkbootstrap.Button(reg_win, text="Завершить регистрацию", bootstyle=ttkbootstrap.PRIMARY, command=lambda: register(entry_reg_login.get(), entry_reg_password.get(), gender_var.get(), city_var.get(), entry_reg_age.get(), reg_win,),).pack(pady=20)
 
-def register(user_login, user_password, user_gender, user_age, reg_win):
-    if user_login and user_password and user_age:  # Проверка на пустые поля
+def register(user_login, user_password, user_gender, user_city, user_age, reg_win):
+    try:
+        user_age = int(user_age)  # Преобразуем введённый возраст в целое число
+    except ValueError:
+        ttkbootstrap.dialogs.dialogs.Messagebox.ok("Ошибка", "Возраст должен быть числом!")
+        return
+
+    if user_age < 16:  # Проверяем, не меньше ли возраст 16 лет
+        ttkbootstrap.dialogs.dialogs.Messagebox.ok("Регистрация невозможна: вам должно быть не менее 16 лет!", "Ошибка")
+        return
+
+    if user_login and user_password and user_gender and user_city and user_age:  # Проверка на пустые поля
         c.execute("SELECT login FROM users WHERE login=?", (user_login,))
         if c.fetchone() is None:
-            # Обновляем запрос на вставку, чтобы включить пол и возраст
-            c.execute("INSERT INTO users (login, password, gender, age) VALUES (?, ?, ?, ?)", (user_login, user_password, user_gender, user_age))
+            # Обновляем запрос на вставку, чтобы включить пол, возраст, город
+            c.execute(
+                "INSERT INTO users (login, password, gender, age, city, profile_photo, profile_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_login, user_password, user_gender, user_age, user_city, None, None),
+            )
             db.commit()
-            ttkbootstrap.dialogs.dialogs.Messagebox.ok("Вы успешно зарегистрировались!", "Регистрация")
+            ttkbootstrap.dialogs.dialogs.Messagebox.ok("Успешно", "Вы успешно зарегистрировались!")
             reg_win.destroy()  # Закрываем окно регистрации
             window.deiconify()  # Возвращаемся к окну авторизации
         else:
             ttkbootstrap.dialogs.dialogs.Messagebox.ok("Ошибка", "Такой пользователь уже существует!")
     else:
-        ttkbootstrap.dialogs.dialogs.Messagebox.ok("Ошибка", "Пожалуйста, заполните все поля!")
+        ttkbootstrap.dialogs.dialogs.Messagebox.ok("Ошибка", "Заполните все пункты регистрации!")
+
 
 def login():
     global current_user
@@ -150,7 +181,142 @@ def open_admin_interface():
 
     # Кнопки администратора
     ttkbootstrap.Button(admin_win, text="Управление пользователями", bootstyle=ttkbootstrap.PRIMARY, command=manage_users).pack(pady=10)
-    ttkbootstrap.Button(admin_win, text="Выход", bootstyle=ttkbootstrap.DANGER, command=admin_win.destroy).pack(pady=20)
+    ttkbootstrap.Button(admin_win, text="Управление городами", bootstyle=PRIMARY, command=open_city_management).pack(pady=10)
+    ttkbootstrap.Button(admin_win, text="Чаты пользователей", bootstyle=PRIMARY, command=open_user_chats).pack(pady=10)
+    ttkbootstrap.Button(admin_win, text="Завершить сеанс", bootstyle=ttkbootstrap.DANGER, command=window.quit).pack(pady=20)
+
+def open_user_chats():
+    # Окно для ввода логина пользователя
+    chat_admin_win = Toplevel(window)
+    chat_admin_win.title("Чаты пользователя")
+    chat_admin_win.geometry("500x400")
+
+    ttkbootstrap.Label(chat_admin_win, text="Введите логин пользователя:", bootstyle=PRIMARY).pack(pady=10)
+    user_login_entry = ttkbootstrap.Entry(chat_admin_win, width=40)
+    user_login_entry.pack(pady=10)
+
+    # Фрейм для списка чатов
+    chat_list_frame = ttkbootstrap.Frame(chat_admin_win)
+    chat_list_frame.pack(fill="both", expand=True, pady=10)
+
+    def search_chats():
+        # Очистка предыдущего содержимого списка чатов
+        for widget in chat_list_frame.winfo_children():
+            widget.destroy()
+
+        user_login = user_login_entry.get().strip()
+
+        if not user_login:
+            messagebox.showerror("Ошибка", "Введите логин пользователя!")
+            return
+
+        # Проверяем, существует ли пользователь
+        c.execute("SELECT login FROM users WHERE login=?", (user_login,))
+        if not c.fetchone():
+            messagebox.showerror("Ошибка", f"Пользователь {user_login} не найден!")
+            return
+
+        # Получение чатов пользователя
+        c.execute("""
+        SELECT DISTINCT
+            CASE WHEN sender = ? THEN receiver ELSE sender END AS chat_partner
+        FROM messages
+        WHERE sender = ? OR receiver = ?
+        """, (user_login, user_login, user_login))
+        chats = c.fetchall()
+
+        if not chats:
+            ttkbootstrap.Label(chat_list_frame, text="У пользователя нет чатов.", bootstyle=PRIMARY).pack(pady=10)
+            return
+
+        # Отображение списка чатов
+        for chat in chats:
+            chat_partner = chat[0]
+            ttkbootstrap.Button(
+                chat_list_frame,
+                text=f"Чат с {chat_partner}",
+                bootstyle=PRIMARY,
+                command=lambda partner=chat_partner: open_chat_admin(user_login, partner)
+            ).pack(pady=5)
+
+    ttkbootstrap.Button(chat_admin_win, text="Найти чаты", bootstyle=PRIMARY, command=search_chats).pack(pady=10)
+
+def open_chat_admin(user_login, chat_partner):
+    chat_win = Toplevel(window)
+    chat_win.title(f"Переписка: {user_login} и {chat_partner}")
+    chat_win.geometry("500x400")
+
+    chat_text = Text(chat_win, state='disabled', wrap="word", width=60, height=20)
+    chat_text.pack(pady=10)
+
+    # Загрузка переписки
+    def load_chat():
+        c.execute("""
+        SELECT sender, message, timestamp
+        FROM messages
+        WHERE (sender = ? AND receiver = ?) OR (sender = ? AND receiver = ?)
+        ORDER BY timestamp
+        """, (user_login, chat_partner, chat_partner, user_login))
+        messages = c.fetchall()
+
+        chat_text.config(state='normal')
+        chat_text.delete("1.0", "end")
+        for sender, message, timestamp in messages:
+            chat_text.insert("end", f"{timestamp} - {sender}: {message}\n")
+        chat_text.config(state='disabled')
+
+    load_chat()
+
+def open_city_management():
+    # Окно для управления городами
+    city_win = Toplevel(window)
+    city_win.title("Управление городами")
+    city_win.geometry("500x400")
+
+    # Функция для добавления города
+    def add_city():
+        city_name = city_entry.get().strip()
+        if city_name:
+            c.execute("INSERT INTO city (name) VALUES (?)", (city_name,))
+            db.commit()
+            city_entry.delete(0, 'end')
+            load_cities()
+        else:
+            messagebox.showerror("Ошибка", "Название города не может быть пустым")
+
+    # Функция для удаления города
+    def delete_city(city_id):
+        c.execute("DELETE FROM city WHERE id = ?", (city_id,))
+        db.commit()
+        load_cities()
+
+    # Поле ввода и кнопка для добавления города
+    city_entry = Entry(city_win, width=30)
+    city_entry.pack(pady=10)
+    ttkbootstrap.Button(city_win, text="Добавить город", bootstyle=PRIMARY, command=add_city).pack(pady=5)
+
+    # Список городов
+    cities_frame = ttkbootstrap.Frame(city_win)
+    cities_frame.pack(fill="both", expand=True, pady=10)
+
+    def load_cities():
+        # Очистить список городов
+        for widget in cities_frame.winfo_children():
+            widget.destroy()
+
+        # Загрузить города из базы данных
+        c.execute("SELECT id, name FROM city")
+        cities = c.fetchall()
+
+        for city_id, city_name in cities:
+            city_row = ttkbootstrap.Frame(cities_frame, padding=5)
+            city_row.pack(fill="x", pady=2)
+
+            ttkbootstrap.Label(city_row, text=city_name, bootstyle=PRIMARY).pack(side="left", padx=10)
+            ttkbootstrap.Button(city_row, text="Удалить", bootstyle=DANGER, command=lambda cid=city_id: delete_city(cid)).pack(side="right", padx=10)
+
+    # Загрузить города при открытии окна
+    load_cities()
 
 def manage_users():
     users_win = Toplevel(window)
@@ -183,37 +349,37 @@ def manage_users():
             user_frame.pack(fill="x", pady=5)
 
             ttkbootstrap.Label(user_frame, text=f"Логин: {user[0]}", bootstyle=PRIMARY).pack(side="left", padx=10)
-            ttkbootstrap.Button(user_frame, text="Редактировать", bootstyle=PRIMARY,command=lambda u=user[0]: edit_user(u)).pack(side="right", padx=10)
-            ttkbootstrap.Button(user_frame, text="Удалить", bootstyle=DANGER,command=lambda u=user[0]: delete_user(u)).pack(side="right", padx=10)
+            ttkbootstrap.Button(user_frame, text="Открыть анкету", bootstyle=PRIMARY, command=lambda u=user[0]: open_user_profile(u)).pack(side="right", padx=10)
 
-    def edit_user(login):
-        edit_win = Toplevel(users_win)
-        edit_win.title(f"Редактирование пользователя {login}")
+    def open_user_profile(user_login):
+        profile_win = Toplevel(users_win)
+        profile_win.title(f"Анкета пользователя {user_login}")
+        profile_win.geometry("500x400+500+200")
 
-        c.execute("SELECT profile_photo, profile_text FROM users WHERE login=?", (login,))
-        user = c.fetchone()
-        if not user:
-            return
+        c.execute("SELECT profile_photo, profile_text FROM users WHERE login=?", (user_login,))
+        user_info = c.fetchone()
 
-        ttkbootstrap.Label(edit_win, text="Описание профиля:").pack(pady=5)
-        text_entry = Text(edit_win, height=5, width=50)
-        text_entry.insert("1.0", user[1] if user[1] else "")
-        text_entry.pack(pady=5)
+        if user_info:
+            user_photo, user_text = user_info
 
-        def save_changes():
-            new_text = text_entry.get("1.0", "end-1c")
-            c.execute("UPDATE users SET profile_text=? WHERE login=?", (new_text, login))
-            db.commit()
-            messagebox.showinfo("Успех", "Данные пользователя обновлены")
-            edit_win.destroy()
+            # Отображение фото
+            if user_photo:
+                try:
+                    img = Image.open(user_photo).resize((200, 250))
+                    photo = ImageTk.PhotoImage(img)
+                    Label(profile_win, image=photo).image = photo
+                    Label(profile_win, image=photo).pack(pady=10)
+                except:
+                    Label(profile_win, text="Фото не загружено").pack(pady=10)
+            else:
+                Label(profile_win, text="Фото отсутствует").pack(pady=10)
 
-        ttkbootstrap.Button(edit_win, text="Сохранить", bootstyle=PRIMARY, command=save_changes).pack(pady=10)
+            # Текст профиля
+            Label(profile_win, text=f"Логин: {user_login}", font=("Arial", 16)).pack(pady=5)
+            Label(profile_win, text=user_text or "Описание отсутствует", wraplength=400, justify="center").pack(pady=10)
 
-    def delete_user(login):
-        if messagebox.askyesno("Удаление", f"Вы уверены, что хотите удалить пользователя {login}?"):
-            c.execute("DELETE FROM users WHERE login=?", (login,))
-            db.commit()
-            search_users()  # Обновить список пользователей
+        else:
+            Label(profile_win, text="Анкета не найдена", font=("Arial", 14)).pack(pady=20)
 
     # Загрузка всех пользователей при открытии окна
     c.execute("SELECT login, profile_photo, profile_text FROM users")
@@ -222,15 +388,14 @@ def manage_users():
 def open_main_menu():  # Создаем новое окно для главного меню
     main_menu_win = Toplevel(window)
     main_menu_win.title("Главное меню")
-    main_menu_win.geometry("400x300+500+200")
+    main_menu_win.geometry("400x350+500+200")
 
     # Добавляем кнопки в главное меню
-    ttkbootstrap.Button(main_menu_win, text="Чат", bootstyle=PRIMARY, command=chats).pack(pady=10)
-    ttkbootstrap.Button(main_menu_win, text="Фильтр анкет", bootstyle=PRIMARY, command=open_filter_and_apply).pack(pady=10)
     ttkbootstrap.Button(main_menu_win, text="Уведомления", bootstyle=ttkbootstrap.PRIMARY, command=show_notifications).pack(pady=10)
-    ttkbootstrap.Button(main_menu_win, text="Все анкеты", bootstyle=ttkbootstrap.PRIMARY, command=open_announcements_with_filters).pack(pady=10)
-    ttkbootstrap.Button(main_menu_win, text="Профиль", bootstyle=ttkbootstrap.PRIMARY, command=open_profile).pack(pady=10)
-    ttkbootstrap.Button(main_menu_win, text="Выход", bootstyle=ttkbootstrap.PRIMARY, command=main_menu_win.destroy).pack(pady=10)
+    ttkbootstrap.Button(main_menu_win, text="Ваши чаты", bootstyle=PRIMARY, command=chats).pack(pady=10)
+    ttkbootstrap.Button(main_menu_win, text="Смотреть анкеты", bootstyle=PRIMARY, command=open_filter_and_apply).pack(pady=10)
+    ttkbootstrap.Button(main_menu_win, text="Ваша анкета", bootstyle=ttkbootstrap.PRIMARY, command=open_profile).pack(pady=10)
+    ttkbootstrap.Button(main_menu_win, text="Завершить сеанс", bootstyle=ttkbootstrap.DANGER, command=window.quit).pack(pady=10)
 
 def chats():
     chats_win = Toplevel(window)
@@ -264,7 +429,7 @@ def chats():
                     chat_button.pack(pady=5)
                     active_chats[user_login] = chat_button
     else:
-        Label(chats_win, text="Нет пользователей, которым понравилась ваша анкета", font=("Arial", 12)).pack(pady=5)
+        Label(chats_win, text="Вашу анкету ещё никто не оценил :(", font=("Arial", 12)).pack(pady=5)
 
 def open_chat(username, active_chats, chat_button):
     chat_win = Toplevel(window)
@@ -294,10 +459,8 @@ def open_chat(username, active_chats, chat_button):
 
     Button(chat_win, text="Отправить", command=send_message).pack(pady=5)
 
-
     # Загрузка предыдущих сообщений
     load_previous_messages(chat_text, username)
-
 
 def load_previous_messages(chat_text, username):
     # Получаем и отображаем предыдущие сообщения
@@ -336,12 +499,10 @@ def show_notifications():
     else:
         Label(notifications_frame, text="Нет уведомлений", font=("Arial", 12)).pack(pady=5)
 
-# Предполагаем, что вы объявили users глобально в начале вашего скрипта
-
 def show_profile(user_login):
     # Создаем новое окно для профиля пользователя
     profile_win = Toplevel(window)
-    profile_win.title("Профиль пользователя")
+    profile_win.title("Анкета пользователя")
     profile_win.geometry("500x500+500+200")
 
     # Получаем информацию о пользователе из базы данных
@@ -381,33 +542,67 @@ def like_user(user_login):
 def open_filter_and_apply():
     filter_win = Toplevel(window)
     filter_win.title("Фильтры")
-    filter_win.geometry("300x200")
+    filter_win.geometry("350x450")
 
-    user_gender = tk.StringVar(value="Не указан")  # Переменная для пола
-    entry_age = ttkbootstrap.Entry(filter_win)    # Поле ввода возраста
-
+    # Пол для выбора пола
+    user_gender = tk.StringVar(value="Не указан")
     ttkbootstrap.Label(filter_win, text="Пол:").pack(pady=10)
     ttkbootstrap.Radiobutton(filter_win, text="Мужчина", variable=user_gender, value="Мужчина").pack()
     ttkbootstrap.Radiobutton(filter_win, text="Женщина", variable=user_gender, value="Женщина").pack()
     ttkbootstrap.Radiobutton(filter_win, text="Не указан", variable=user_gender, value="Не указан").pack()
 
-    ttkbootstrap.Label(filter_win, text="Минимальный возраст:").pack(pady=10)
-    entry_age.pack()
+    # Поле ввода интересующего возраста (диапазон)
+    ttkbootstrap.Label(filter_win, text="Интересующий возраст:").pack(pady=10)
+    ttkbootstrap.Label(filter_win, text="От:").pack()
+    entry_age_from = ttkbootstrap.Entry(filter_win)
+    entry_age_from.pack(pady=5)
+    ttkbootstrap.Label(filter_win, text="До:").pack()
+    entry_age_to = ttkbootstrap.Entry(filter_win)
+    entry_age_to.pack(pady=5)
 
+    # Поле для выбора города
+    ttkbootstrap.Label(filter_win, text="Выберите город:").pack(pady=10)
+    city_var = tk.StringVar(value="Все города")
+    city_combobox = ttk.Combobox(filter_win, textvariable=city_var, state="readonly", width=30)
+    city_combobox.pack(pady=5)
+
+    # Загрузка списка городов из базы данных
+    c.execute("SELECT name FROM city")
+    cities = [row[0] for row in c.fetchall()]
+    city_combobox['values'] = ["Все города"] + cities  # Добавляем опцию "Все города"
+    city_combobox.current(0)  # Устанавливаем "Все города" по умолчанию
+
+    # Применить фильтр
     def apply_filter():
         gender_filter = user_gender.get()
+        age_from_filter = None
+        age_to_filter = None
+        city_filter = city_var.get()
+
+        # Проверяем, что возраста введены корректно
         try:
-            age_filter = int(entry_age.get()) if entry_age.get() else None
+            if entry_age_from.get():
+                age_from_filter = int(entry_age_from.get())
+            if entry_age_to.get():
+                age_to_filter = int(entry_age_to.get())
         except ValueError:
             messagebox.showerror("Ошибка", "Возраст должен быть числом.")
             return
 
-        filter_win.destroy()  # Закрываем окно фильтров
-        open_announcements_with_filters(gender_filter, age_filter)  # Открываем анкеты с фильтром
+        # Закрываем окно фильтров
+        filter_win.destroy()
 
-    ttkbootstrap.Button(filter_win, text="Применить", bootstyle=PRIMARY, command=apply_filter).pack(pady=10)
+        # Передаём параметры в функцию отображения анкет
+        open_announcements_with_filters(
+            gender_filter,
+            city_filter,
+            age_from_filter,
+            age_to_filter
+        )
 
-def open_announcements_with_filters(gender_filter=None, age_filter=None):
+    ttkbootstrap.Button(filter_win, text="Применить", bootstyle=PRIMARY, command=apply_filter).pack(pady=20)
+
+def open_announcements_with_filters(gender_filter=None, city_filter=None, age_from_filter=None, age_to_filter=None):
     announcements_win = Toplevel(window)
     announcements_win.title("Анкеты пользователей")
     announcements_win.geometry("500x500+500+200")
@@ -415,16 +610,29 @@ def open_announcements_with_filters(gender_filter=None, age_filter=None):
     current_index = [0]
 
     def fetch_users():
-        query = "SELECT login, age, gender, profile_photo, profile_text FROM users WHERE login != ?"
+        query = "SELECT login, age, gender, city, profile_photo, profile_text FROM users WHERE login != ?"
         parameters = [current_user[0]]
 
         if gender_filter and gender_filter != "Не указан":
             query += " AND gender = ?"
             parameters.append(gender_filter)
 
-        if age_filter:
+        if city_filter and city_filter != "Все города":
+            query += " AND city = ?"
+            parameters.append(city_filter)
+
+        if age_from_filter is not None and age_to_filter is not None:
+            query += " AND age BETWEEN ? AND ?"
+            parameters.extend([age_from_filter, age_to_filter])
+        elif age_from_filter is not None:
             query += " AND age >= ?"
-            parameters.append(age_filter)
+            parameters.append(age_from_filter)
+        elif age_to_filter is not None:
+            query += " AND age <= ?"
+            parameters.append(age_to_filter)
+
+        # Добавляем случайный порядок
+        query += " ORDER BY RANDOM()"
 
         c.execute(query, parameters)
         return c.fetchall()
@@ -437,7 +645,7 @@ def open_announcements_with_filters(gender_filter=None, age_filter=None):
             return
 
         user = users[index]
-        user_login, user_age, user_gender, user_photo, user_text = user
+        user_login, user_age, user_gender, user_city, user_photo, user_text = user
 
         if user_photo:
             try:
@@ -447,9 +655,11 @@ def open_announcements_with_filters(gender_filter=None, age_filter=None):
                 Label(announcements_win, image=photo).pack(pady=10)
             except:
                 Label(announcements_win, text="Фото не загружено").pack()
+
         Label(announcements_win, text=f"Логин: {user_login}", font=("Arial", 16)).pack(pady=5)
         Label(announcements_win, text=f"Возраст: {user_age}", font=("Arial", 16)).pack(pady=5)
         Label(announcements_win, text=f"Пол: {user_gender}", font=("Arial", 16)).pack(pady=5)
+        Label(announcements_win, text=f"Город: {user_city}", font=("Arial", 16)).pack(pady=5)
         Label(announcements_win, text=user_text, wraplength=400, justify="center").pack(pady=10)
 
         if index > 0:
@@ -467,7 +677,7 @@ def open_announcements_with_filters(gender_filter=None, age_filter=None):
 
 def open_profile():
     profile_win = Toplevel(window)
-    profile_win.title("Профиль")
+    profile_win.title("Ваша анкета")
     profile_win.geometry("500x600+500+200")
 
     # Загрузка текущего профиля пользователя
@@ -531,7 +741,7 @@ def upload_photo():
 def save_profile(profile_text):
     c.execute("UPDATE users SET profile_photo=?, profile_text=? WHERE login=?", (profile_photo_path, profile_text, current_user[0]))
     db.commit()
-    messagebox.showinfo("Сохранение профиля", "Профиль успешно сохранен!")
+    messagebox.showinfo("Сохранение анкеты", "Анкета успешно сохранен!")
 
 window.mainloop()
 db.close()
