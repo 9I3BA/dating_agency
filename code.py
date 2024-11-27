@@ -547,8 +547,8 @@ def open_filter_and_apply():
     # Пол для выбора пола
     user_gender = tk.StringVar(value="Не указан")
     ttkbootstrap.Label(filter_win, text="Пол:").pack(pady=10)
-    ttkbootstrap.Radiobutton(filter_win, text="Мужчина", variable=user_gender, value="Мужчина").pack()
-    ttkbootstrap.Radiobutton(filter_win, text="Женщина", variable=user_gender, value="Женщина").pack()
+    ttkbootstrap.Radiobutton(filter_win, text="Мужской", variable=user_gender, value="Мужской").pack()
+    ttkbootstrap.Radiobutton(filter_win, text="Женский", variable=user_gender, value="Женский").pack()
     ttkbootstrap.Radiobutton(filter_win, text="Не указан", variable=user_gender, value="Не указан").pack()
 
     # Поле ввода интересующего возраста (диапазон)
