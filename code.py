@@ -90,7 +90,7 @@ def reg_window():
     entry_reg_login.pack()
 
     ttkbootstrap.Label(reg_win, text="Введите пароль:", bootstyle=ttkbootstrap.PRIMARY).pack(pady=10)
-    entry_reg_password = ttkbootstrap.Entry(reg_win, width=40, show="*", bootstyle=ttkbootstrap.PRIMARY)
+    entry_reg_password = ttkbootstrap.Entry(reg_win, width=40, bootstyle=ttkbootstrap.PRIMARY)
     entry_reg_password.pack()
 
     # Выбор пола
@@ -124,7 +124,7 @@ def register(user_login, user_password, user_gender, user_city, user_age, reg_wi
     try:
         user_age = int(user_age)  # Преобразуем введённый возраст в целое число
     except ValueError:
-        ttkbootstrap.dialogs.dialogs.Messagebox.ok("Возраст должен быть числом!", "Ошибка")
+        ttkbootstrap.dialogs.dialogs.Messagebox.ok("Заполните все поля!", "Ошибка")
         return
 
     if user_age < 16:  # Проверяем, не меньше ли возраст 16 лет
@@ -141,7 +141,7 @@ def register(user_login, user_password, user_gender, user_city, user_age, reg_wi
                 (user_login, user_password, user_gender, user_age, user_city, None, None),
             )
             db.commit()
-            ttkbootstrap.dialogs.dialogs.Messagebox.ok("Вы успешно зарегистрировались!", "Успешно")
+            ttkbootstrap.dialogs.dialogs.Messagebox.ok("Пользователь добавлен в базу данных", "Вы успешно зарегистрировались")
             reg_win.destroy()  # Закрываем окно регистрации
             window.deiconify()  # Возвращаемся к окну авторизации
         else:
@@ -423,7 +423,7 @@ def open_main_menu():  # Создаем новое окно для главно�
 # Открытие окна чатов пользователя
 def chats():
     chats_win = Toplevel(window)
-    chats_win.title("Чат")
+    chats_win.title("Список чатов")
     chats_win.geometry("400x300")
 
     Label(chats_win, text="Чаты", font=("Arial", 14)).pack(pady=10)
@@ -453,7 +453,7 @@ def chats():
                     chat_button.pack(pady=5)
                     active_chats[user_login] = chat_button
     else:
-        Label(chats_win, text="Вашу анкету ещё никто не оценил :(", font=("Arial", 12)).pack(pady=5)
+        Label(chats_win, text="На данный момент у вас нет чатов", font=("Arial", 12)).pack(pady=5)
 
 # Открытие чата с пользователем
 def open_chat(username, active_chats, chat_button):
@@ -566,7 +566,7 @@ def show_profile(user_login):
 def like_user(user_login):
     c.execute("INSERT INTO likes (liked_login, user_login) VALUES (?, ?)", (user_login, current_user[0]))
     db.commit()
-    messagebox.showinfo("Лайк", f"Вы лайкнули анкету пользователя: {user_login}")
+    messagebox.showinfo("Лайк", f"Вы оценили анкету пользователя: {user_login}")
 
 # Окно для фильтров поиска анкет
 def open_filter_and_apply():
@@ -727,16 +727,25 @@ def open_profile():
     profile_photo_path = profile_info[0] if profile_info and profile_info[0] else ""
 
     # Отображение текущей фотографии
-    if profile_photo_path:
-        img = Image.open(profile_photo_path)
-        img = img.resize((200, 250), Image.LANCZOS)  # Изменено с ANTIALIAS на LANCZOS
-        img = ImageTk.PhotoImage(img)
-        photo_label = Label(profile_win, image=img)
-        photo_label.image = img  # сохранить ссылку для отображения
-        photo_label.pack(pady=10)
-    else:
-        photo_label = Label(profile_win, text="Фото не загружено")
-        photo_label.pack(pady=10)
+    def update_photo():
+        """Обновляет отображаемую фотографию."""
+        for widget in photo_frame.winfo_children():
+            widget.destroy()  # Удаляем старые элементы
+
+        if profile_photo_path:
+            img = Image.open(profile_photo_path)
+            img = img.resize((200, 250), Image.LANCZOS)
+            img = ImageTk.PhotoImage(img)
+            photo_label = Label(photo_frame, image=img)
+            photo_label.image = img  # сохранить ссылку для отображения
+            photo_label.pack(pady=10)
+        else:
+            photo_label = Label(photo_frame, text="Фото не загружено")
+            photo_label.pack(pady=10)
+
+    photo_frame = tk.Frame(profile_win)
+    photo_frame.pack()
+    update_photo()
 
     # Поле для текста анкеты
     ttkbootstrap.Label(profile_win, text="Напишите анкету:").pack(pady=10)
@@ -748,8 +757,13 @@ def open_profile():
         profile_text_box.insert("1.0", profile_info[1])
 
     # Кнопки для загрузки фото и сохранения анкеты
+    def save_and_update():
+        """Сохраняет профиль и обновляет интерфейс."""
+        save_profile(profile_text_box.get("1.0", "end-1c"))
+        update_photo()
+
     ttkbootstrap.Button(profile_win, text="Загрузить фото", bootstyle=ttkbootstrap.PRIMARY, command=upload_photo).pack(pady=5)
-    ttkbootstrap.Button(profile_win, text="Сохранить анкету", bootstyle=ttkbootstrap.PRIMARY, command=lambda: save_profile(profile_text_box.get("1.0", "end-1c"))).pack(pady=5)
+    ttkbootstrap.Button(profile_win, text="Сохранить анкету", bootstyle=ttkbootstrap.PRIMARY, command=save_and_update).pack(pady=5)
     ttkbootstrap.Button(profile_win, text="Назад", bootstyle=ttkbootstrap.PRIMARY, command=profile_win.destroy).pack(pady=10)
 
 # Загрузка фото для профиля
@@ -782,7 +796,7 @@ def upload_photo():
 def save_profile(profile_text):
     c.execute("UPDATE users SET profile_photo=?, profile_text=? WHERE login=?", (profile_photo_path, profile_text, current_user[0]))
     db.commit()
-    messagebox.showinfo("Сохранение анкеты", "Анкета успешно сохранен!")
+    messagebox.showinfo("Сохранение анкеты", "Анкета успешно сохранена!")
 
 window.mainloop()
 db.close()
